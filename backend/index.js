@@ -1,11 +1,18 @@
-console.log("🔥 THIS index.js FILE IS RUNNING 🔥");
+require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// ✅ Gemini init
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// 🔍 sanity check
+console.log("Gemini key loaded:", !!process.env.GEMINI_API_KEY);
 
 // --------------------
 // IN-MEMORY STORAGE
@@ -156,6 +163,36 @@ items.push(
 app.get("/ping-demand", (req, res) => {
   res.json({ ok: true });
 });
+// --------------------
+// GEMINI TEST ROUTE
+// --------------------
+
+app.get("/ai/test", async (req, res) => {
+  try {
+    const model = genAI.getGenerativeModel({
+      model: "models/gemini-1.5-pro"
+    });
+
+    const result = await model.generateContent(
+      "Say exactly: Gemini backend is working"
+    );
+
+    res.json({
+      success: true,
+      reply: result.response.text()
+    });
+  } catch (error) {
+    console.error("Gemini error FULL:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+
+
+
 
 const PORT = 5000;
 app.listen(PORT, () => {

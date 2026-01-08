@@ -11,25 +11,26 @@ export default function Demand() {
   // --------------------
   useEffect(() => {
     fetch("http://localhost:5000/items")
-      .then(res => res.json())
-      .then(data => setItems(data))
+      .then((res) => res.json())
+      .then((data) => setItems(data))
       .catch(() => alert("Failed to load items"));
   }, []);
 
   // --------------------
-  // LOAD DEMAND FOR ITEM
+  // RESET + LOAD DEMAND ON ITEM CHANGE
   // --------------------
   useEffect(() => {
     if (!selectedItem) {
-      setDemand([]);            // ✅ RESET when no item
+      setDemand([]);
+      setQuantity("");
       return;
     }
 
-    setDemand([]);              // ✅ RESET immediately on change
+    setDemand([]); // 🔥 VERY IMPORTANT RESET
 
     fetch(`http://localhost:5000/demand/${selectedItem}`)
-      .then(res => res.json())
-      .then(data => setDemand(data))
+      .then((res) => res.json())
+      .then((data) => setDemand(data))
       .catch(() => alert("Failed to load demand"));
   }, [selectedItem]);
 
@@ -37,7 +38,7 @@ export default function Demand() {
   // ADD NEXT WEEK DEMAND
   // --------------------
   const addWeek = async () => {
-    if (!quantity) return;
+    if (!quantity || !selectedItem) return;
 
     await fetch("http://localhost:5000/demand", {
       method: "POST",
@@ -57,7 +58,7 @@ export default function Demand() {
   };
 
   // --------------------
-  // EDIT EXISTING WEEK
+  // UPDATE EXISTING WEEK
   // --------------------
   const updateWeek = async (week, value) => {
     await fetch("http://localhost:5000/demand", {
@@ -86,37 +87,36 @@ export default function Demand() {
         onChange={(e) => setSelectedItem(e.target.value)}
       >
         <option value="">Select Item</option>
-        {items.map(item => (
+        {items.map((item) => (
           <option key={item.id} value={item.id}>
             {item.name}
           </option>
         ))}
       </select>
 
-      {/* ADD WEEK */}
+      {/* DEMAND SECTION */}
       {selectedItem && (
         <>
           <h3>Weekly Demand (Max 12 Weeks)</h3>
 
           <input
             type="number"
-            placeholder="Demand value"
+            placeholder="Enter demand"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
           />
           <button onClick={addWeek}>Add Week</button>
 
-          {/* DEMAND LIST */}
           <ul>
-            {demand.map(d => (
+            {demand.map((d) => (
               <li key={d.week}>
                 Week {d.week}:{" "}
                 <input
                   type="number"
-                  value={d.quantity}                 {/* ✅ FIX */}
-                  onChange={(e) =>
-                    updateWeek(d.week, e.target.value)
-                  }
+                  value={d.quantity}
+                  onChange={(e) => {
+                    updateWeek(d.week, e.target.value);
+                  }}
                 />
               </li>
             ))}
