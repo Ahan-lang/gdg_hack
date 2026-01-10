@@ -5,6 +5,8 @@ import MainLayout from "./layouts/MainLayout";
 import Home from "./pages/Home";
 import Stock from "./pages/Stock";
 import Demand from "./pages/Demand";
+import Recommend from "./pages/Recommend";
+import CashRecommend from "./pages/CashRecommend";
 
 export default function App() {
   return (
@@ -13,6 +15,9 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/stock" element={<Stock />} />
         <Route path="/demand" element={<Demand />} />
+        <Route path="/recommend" element={<Recommend />} />
+        <Route path="/cash" element={<CashRecommend />} />
+
       </Route>
     </Routes>
   );
