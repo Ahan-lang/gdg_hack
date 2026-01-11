@@ -1,5 +1,5 @@
 import Hero from "../components/Hero";
-import ActionCards from "../components/ActionCards";
+import Actioncards from "../components/Actioncards";
 import FeatureStrip from "../components/FeatureStrip";
 // 1. Import the Analytics Dashboard
 import AnalyticsDashboard from "../components/AnalyticsDashboard";
