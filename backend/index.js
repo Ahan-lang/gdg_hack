@@ -2,26 +2,30 @@ require("dotenv").config();
 const mongoose = require('mongoose');
 const express = require("express");
 const cors = require("cors");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 
-// --------------------
-// DEPLOYMENT SETTINGS
-// --------------------
-// Allow all origins for prototype deployment so your frontend can connect easily
-app.use(cors());
+// --- MIDDLEWARE ---
+// --- MIDDLEWARE ---
+app.use(cors({
+  origin: "*", // Allows all origins for hackathon ease, or put your Vercel URL here
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type"]
+}));
 app.use(express.json());
 
-// --------------------
-// DATABASE CONNECTION
-// --------------------
+// --- GEMINI AI CONFIGURATION ---
+// Changed model to gemini-1.5-flash (the standard stable version)
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const aiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+// --- DATABASE CONNECTION ---
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("🚀 MongoDB Connected Successfully"))
   .catch((err) => console.error("❌ MongoDB Connection Error:", err));
 
-// --------------------
-// SCHEMAS
-// --------------------
+// --- SCHEMAS ---
 const itemSchema = new mongoose.Schema({
   name: String,
   stock: Number,
@@ -39,12 +43,11 @@ const demandSchema = new mongoose.Schema({
 });
 const Demand = mongoose.model('Demand', demandSchema);
 
-// --------------------
-// HELPER FUNCTIONS
-// --------------------
+// --- HELPER FUNCTIONS ---
 function calculateAvgDailyDemand(weeklyHistory) {
   if (!weeklyHistory || weeklyHistory.length === 0) return 0;
   const totalQuantity = weeklyHistory.reduce((sum, entry) => sum + Number(entry.quantity || 0), 0);
+  // Returns average daily demand (Total / Number of records / 7 days)
   return (totalQuantity / weeklyHistory.length) / 7;
 }
 
@@ -71,14 +74,22 @@ function calculateEffectiveDailyDemand({ avgDailyDemand, hasIncreasingTrend, mar
   return effectiveDemand;
 }
 
-// --------------------
-// ROUTES
-// --------------------
+// --- ROUTES ---
 
-// Root Route for Health Check
+// 1. Root Health Check
 app.get("/", (req, res) => res.send("Inventory AI API is Live!"));
 
-// 1. ITEM CRUD
+// 2. AI CONNECTION TEST
+app.get("/test-ai", async (req, res) => {
+  try {
+    const result = await aiModel.generateContent("Say 'AI is working' in one sentence.");
+    res.json({ message: "Gemini Connection Success", response: result.response.text() });
+  } catch (err) {
+    res.status(500).json({ error: "Gemini Error", details: err.message });
+  }
+});
+
+// 3. ITEM CRUD
 app.get("/items", async (req, res) => {
   try {
     const allItems = await Item.find(); 
@@ -116,29 +127,57 @@ app.delete("/items/:id", async (req, res) => {
   }
 });
 
-// 2. DEMAND TRACKING
+// 4. DEMAND TRACKING
+// --- UPDATED DEMAND ROUTES ---
+
+// A. FETCH HISTORY (For immediate display on selection)
+app.get("/demand/:itemId", async (req, res) => {
+  try {
+    const history = await Demand.find({ itemId: req.params.itemId }).sort({ date: 1 });
+    res.json(history.map((d, i) => ({ 
+      _id: d._id, // Required for editing
+      week: i + 1, 
+      quantity: d.quantity 
+    })));
+  } catch (err) {
+    res.status(500).json({ error: "Fetch failed" });
+  }
+});
+
+// B. LOG NEW DEMAND (With Negative Check)
 app.post("/demand", async (req, res) => {
   try {
     const { itemId, quantity } = req.body;
+    if (Number(quantity) < 0) return res.status(400).json({ error: "Demand cannot be negative" });
+
     const newEntry = new Demand({ itemId, quantity: Number(quantity) });
     await newEntry.save();
+    
+    // Return fresh history
     const history = await Demand.find({ itemId }).sort({ date: 1 });
-    res.json(history.map((d, i) => ({ week: i + 1, quantity: d.quantity })));
+    res.json(history.map((d, i) => ({ _id: d._id, week: i + 1, quantity: d.quantity })));
   } catch (err) {
     res.status(500).json({ error: "Update failed" });
   }
 });
 
-app.get("/demand/:itemId", async (req, res) => {
+// C. EDIT EXISTING DEMAND
+app.put("/demand/:id", async (req, res) => {
   try {
-    const history = await Demand.find({ itemId: req.params.itemId }).sort({ date: 1 });
-    res.json(history.map((d, i) => ({ week: i + 1, quantity: d.quantity })));
+    const { quantity, itemId } = req.body;
+    if (Number(quantity) < 0) return res.status(400).json({ error: "Demand cannot be negative" });
+
+    await Demand.findByIdAndUpdate(req.params.id, { quantity: Number(quantity) });
+    
+    // Return fresh history for the specific item
+    const history = await Demand.find({ itemId }).sort({ date: 1 });
+    res.json(history.map((d, i) => ({ _id: d._id, week: i + 1, quantity: d.quantity })));
   } catch (err) {
-    res.status(500).json({ error: "History failed" });
+    res.status(500).json({ error: "Edit failed" });
   }
 });
 
-// 3. AI RECOMMENDATION
+// 5. STOCK RECOMMENDATION
 app.post("/recommend/stock", async (req, res) => {
   try {
     const { itemId, isFestival } = req.body;
@@ -158,18 +197,109 @@ app.post("/recommend/stock", async (req, res) => {
     });
 
     const recommendedStock = Math.ceil(effectiveDemand * 30);
+    const buyQuantity = Math.max(0, recommendedStock - item.stock);
+    const status = recommendedStock > item.stock ? "Restock Needed" : "Healthy";
+
+    const prompt = `Explain why stocking ${recommendedStock} units of ${item.name} is recommended. Current stock is ${item.stock}. Mention status is ${status}. Use 2 sentences.`;
+    const result = await aiModel.generateContent(prompt);
 
     res.json({
       recommendedStock,
+      currentStock: item.stock,
+      buyQuantity,
       avgDailyDemand: avgDailyDemand.toFixed(2),
-      status: recommendedStock > item.stock ? "Restock Needed" : "Healthy"
+      status,
+      aiExplanation: result.response.text()
     });
   } catch (err) {
-    res.status(500).json({ error: "Recommendation error" });
+    res.status(500).json({ error: "Stock Recommendation error" });
   }
 });
 
-// 4. ANALYTICS DASHBOARD (Completed Missing Logic)
+// 6. CAPITAL OPTIMIZER (OPTIMIZE BUDGET)
+app.post("/recommend/optimize-budget", async (req, res) => {
+  try {
+    const { budget, isFestival } = req.body;
+    const allItems = await Item.find();
+    let understockItems = [];
+
+    for (const item of allItems) {
+      const history = await Demand.find({ itemId: item._id }).sort({ date: 1 });
+      const avgDailyDemand = calculateAvgDailyDemand(history);
+      const hasIncreasingTrend = detectIncreasingTrend(history);
+      const marginPercent = calculateMarginPercent(item.unit_price, item.selling_price);
+
+      const effectiveDemand = calculateEffectiveDailyDemand({
+        avgDailyDemand,
+        hasIncreasingTrend,
+        marginPercent,
+        isFestival
+      });
+
+      const recommendedStockLevel = Math.ceil(effectiveDemand * 30);
+      const needQty = recommendedStockLevel - item.stock;
+
+      if (needQty > 0) {
+        let priorityScore = effectiveDemand * (item.selling_price - item.unit_price);
+        if (hasIncreasingTrend) priorityScore *= 1.2;
+
+        understockItems.push({
+          _id: item._id,
+          name: item.name,
+          unit_price: item.unit_price,
+          needQty,
+          priorityScore,
+          currentStock: item.stock
+        });
+      }
+    }
+
+    understockItems.sort((a, b) => b.priorityScore - a.priorityScore);
+
+    let remainingBudget = budget;
+    let purchasePlan = [];
+    let totalEstimatedCost = 0;
+
+    for (const target of understockItems) {
+      if (remainingBudget <= 0) break;
+      const maxCanAfford = Math.floor(remainingBudget / target.unit_price);
+      const buyQty = Math.min(target.needQty, maxCanAfford);
+
+      if (buyQty > 0) {
+        const cost = buyQty * target.unit_price;
+        purchasePlan.push({
+          itemId: target._id,
+          name: target.name,
+          quantity: buyQty,
+          cost: cost,
+          unitPrice: target.unit_price
+        });
+        remainingBudget -= cost;
+        totalEstimatedCost += cost;
+      }
+    }
+
+    let aiExplanation = "No plan generated.";
+    if (purchasePlan.length > 0) {
+      const prompt = `You are a professional inventory consultant. I have a budget of ₹${budget}. I am buying: ${purchasePlan.map(p => `${p.quantity} units of ${p.name}`).join(", ")}. Explain why this is smart for business profit in 3 sentences.`;
+      const result = await aiModel.generateContent(prompt);
+      aiExplanation = result.response.text();
+    }
+
+    res.json({
+      plan: purchasePlan,
+      totalCost: totalEstimatedCost,
+      remainingBudget: remainingBudget.toFixed(2),
+      aiExplanation
+    });
+
+  } catch (err) {
+    console.error("Optimization Error:", err);
+    res.status(500).json({ error: "Budget optimization failed" });
+  }
+});
+
+// 7. ANALYTICS DASHBOARD
 app.get("/analytics/dashboard", async (req, res) => {
   try {
     const allItems = await Item.find();
@@ -213,11 +343,11 @@ app.get("/analytics/dashboard", async (req, res) => {
   }
 });
 
-// --------------------
-// SERVER START
-// --------------------
-// '0.0.0.0' is required for Render to bind correctly to the external network
-const PORT = process.env.PORT || 5000;
+// --- SERVER START ---
+// --- SERVER START ---
+// process.env.PORT is mandatory for Render deployment
+const PORT = process.env.PORT || 5000; 
+
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
