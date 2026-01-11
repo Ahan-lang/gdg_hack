@@ -14,14 +14,13 @@ export default function CashRecommend() {
     setResult(null);
     
     try {
-      // Calling the unified route that handles logic + AI
-      const res = await fetch("http://localhost:5000/recommend/optimize-budget", {
+      // UPDATED URL
+      const res = await fetch("https://gdg-hack.onrender.com/recommend/optimize-budget", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ budget: Number(budget), isFestival }),
       });
 
-      // Guard against 404/500 HTML errors (prevents Unexpected token '<' error)
       if (!res.ok) {
         throw new Error(`Server Error: ${res.status}. Check if backend is running.`);
       }
@@ -84,7 +83,6 @@ export default function CashRecommend() {
 
         {/* Output Section */}
         <div>
-          {/* Error Message Display */}
           {error && (
             <div style={{ padding: "20px", background: "#fef2f2", color: "#b91c1c", borderRadius: "12px", border: "1px solid #fee2e2", marginBottom: "20px" }}>
               <strong>Error:</strong> {error}
@@ -106,7 +104,6 @@ export default function CashRecommend() {
 
           {result && (
             <div style={{ animation: "fadeIn 0.4s ease-out" }}>
-              {/* Financial Summary */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px" }}>
                 <div style={{ padding: "20px", background: "#f1f5f9", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
                   <span style={{ fontSize: "12px", color: "#64748b", fontWeight: "700", textTransform: "uppercase" }}>Total Outlay</span>
@@ -118,7 +115,6 @@ export default function CashRecommend() {
                 </div>
               </div>
 
-              {/* Item Table - Fixed Syntax on Line 98 */}
               <div style={{ background: "white", borderRadius: "16px", border: "1px solid #e2e8f0", overflow: "hidden", marginBottom: "24px" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead style={{ background: "#f8fafc" }}>
@@ -144,7 +140,6 @@ export default function CashRecommend() {
                 </table>
               </div>
 
-              {/* AI Strategy Note */}
               {result.aiExplanation && (
                 <div style={{ padding: "24px", background: "#f8fafc", borderRadius: "16px", borderLeft: "4px solid #0f172a" }}>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "10px" }}>

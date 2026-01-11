@@ -6,12 +6,13 @@ export default function AnalyticsDashboard() {
   const [loading, setLoading] = useState(true);
 
   // --------------------
-  // FETCH ANALYTICS (Reverted to Local Backend)
+  // FETCH ANALYTICS (Updated to Live Backend)
   // --------------------
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const res = await fetch("http://localhost:5000/analytics/dashboard");
+        // UPDATED URL FROM localhost:5000 TO GDG-HACK.ONRENDER.COM
+        const res = await fetch("https://gdg-hack.onrender.com/analytics/dashboard");
         if (!res.ok) throw new Error("Failed to fetch");
         const json = await res.json();
         
@@ -137,7 +138,7 @@ export default function AnalyticsDashboard() {
   );
 }
 
-// --- STYLING CONSTANTS ---
+// --- STYLING CONSTANTS (Keep as original) ---
 const loaderStyle = { padding: "100px", textAlign: "center", color: "#2f855a", fontWeight: "bold" };
 const heroCardStyle = { background: "#ffffff", padding: "30px", borderRadius: "24px", border: "1px solid #e2e8f0", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)" };
 const tableContainerStyle = { background: "#ffffff", borderRadius: "24px", boxShadow: "0 4px 20px rgba(0, 0, 0, 0.03)", border: "1px solid #e2e8f0", overflow: "hidden" };
