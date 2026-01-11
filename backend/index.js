@@ -1,39 +1,61 @@
 require("dotenv").config();
+const mongoose = require('mongoose');
 const express = require("express");
 const cors = require("cors");
-const { getGeminiModel } = require("./ai/gemini");
 
 const app = express();
+
+// --------------------
+// DEPLOYMENT SETTINGS
+// --------------------
+// Allow all origins for prototype deployment so your frontend can connect easily
 app.use(cors());
 app.use(express.json());
 
 // --------------------
-// IN-MEMORY STORAGE
+// DATABASE CONNECTION
 // --------------------
-let items = [];
-let demand = {};
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("🚀 MongoDB Connected Successfully"))
+  .catch((err) => console.error("❌ MongoDB Connection Error:", err));
 
-// Helper Functions
-function calculateAvgDailyDemand(weeklyDemand) {
-  if (!weeklyDemand || weeklyDemand.length === 0) return 0;
-  const totalWeekly = weeklyDemand.reduce(
-    (sum, w) => sum + Number(w.quantity || 0),
-    0
-  );
-  const avgWeekly = totalWeekly / weeklyDemand.length;
-  return avgWeekly / 7;
+// --------------------
+// SCHEMAS
+// --------------------
+const itemSchema = new mongoose.Schema({
+  name: String,
+  stock: Number,
+  unit_price: Number,
+  selling_price: Number,
+  category: String,
+  unit: { type: String, default: "pcs" }
+});
+const Item = mongoose.model('Item', itemSchema);
+
+const demandSchema = new mongoose.Schema({
+  itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item' },
+  quantity: Number,
+  date: { type: Date, default: Date.now }
+});
+const Demand = mongoose.model('Demand', demandSchema);
+
+// --------------------
+// HELPER FUNCTIONS
+// --------------------
+function calculateAvgDailyDemand(weeklyHistory) {
+  if (!weeklyHistory || weeklyHistory.length === 0) return 0;
+  const totalQuantity = weeklyHistory.reduce((sum, entry) => sum + Number(entry.quantity || 0), 0);
+  return (totalQuantity / weeklyHistory.length) / 7;
 }
 
-function detectIncreasingTrend(weeklyDemand) {
-  if (!weeklyDemand || weeklyDemand.length < 4) return false;
-  const recent = weeklyDemand.slice(-8);
+function detectIncreasingTrend(weeklyHistory) {
+  if (!weeklyHistory || weeklyHistory.length < 3) return false;
+  const recent = weeklyHistory.slice(-4);
   let increases = 0;
   for (let i = 1; i < recent.length; i++) {
-    if (recent[i].quantity > recent[i - 1].quantity) {
-      increases++;
-    }
+    if (recent[i].quantity > recent[i - 1].quantity) increases++;
   }
-  return increases >= 6;
+  return increases >= 2;
 }
 
 function calculateMarginPercent(buyPrice, sellPrice) {
@@ -41,355 +63,161 @@ function calculateMarginPercent(buyPrice, sellPrice) {
   return (sellPrice - buyPrice) / sellPrice;
 }
 
-function calculateEffectiveDailyDemand({
-  avgDailyDemand,
-  hasIncreasingTrend,
-  marginPercent,
-  isFestival
-}) {
+function calculateEffectiveDailyDemand({ avgDailyDemand, hasIncreasingTrend, marginPercent, isFestival }) {
   let effectiveDemand = avgDailyDemand;
-  if (hasIncreasingTrend) effectiveDemand *= 1.15;
-  if (marginPercent >= 0.45) {
-    effectiveDemand *= 1.15;
-  } else if (marginPercent >= 0.30) {
-    effectiveDemand *= 1.10;
-  }
-  if (isFestival) effectiveDemand *= 1.25;
+  if (hasIncreasingTrend) effectiveDemand *= 1.20;
+  if (marginPercent >= 0.30) effectiveDemand *= 1.10;
+  if (isFestival) effectiveDemand *= 1.30;
   return effectiveDemand;
 }
 
-// Debug logger
-setInterval(() => {
-  console.log("DEMAND STATE:", JSON.stringify(demand, null, 2));
-}, 5000);
-
 // --------------------
-// HEALTH CHECK
+// ROUTES
 // --------------------
-app.get("/", (req, res) => {
-  res.send("API running");
-});
 
-// --------------------
-// ITEM ROUTES (UNCHANGED)
-// --------------------
-app.get("/items", (req, res) => {
-  res.json(items);
-});
+// Root Route for Health Check
+app.get("/", (req, res) => res.send("Inventory AI API is Live!"));
 
-app.post("/items", (req, res) => {
-  const { name, stock, category, unit_price, unit } = req.body;
-  if (!name || stock == null) {
-    return res.status(400).json({ error: "name and stock required" });
-  }
-  const newItem = {
-    id: Date.now(),
-    name,
-    stock: Number(stock),
-    category: category || "general",
-    unit_price: Number(unit_price || 0),
-    unit: unit || "pcs",
-    createdAt: new Date().toISOString()
-  };
-  items.push(newItem);
-  res.status(201).json(newItem);
-});
-
-app.put("/items/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const item = items.find(i => i.id === id);
-  if (!item) return res.status(404).json({ error: "Item not found" });
-  const { name, stock, category, unit_price, unit } = req.body;
-  if (name !== undefined) item.name = name;
-  if (stock !== undefined) item.stock = Number(stock);
-  if (category !== undefined) item.category = category;
-  if (unit_price !== undefined) item.unit_price = Number(unit_price);
-  if (unit !== undefined) item.unit = unit;
-  res.json(item);
-});
-
-app.delete("/items/:id", (req, res) => {
-  const id = Number(req.params.id);
-  items = items.filter(i => i.id !== id);
-  res.json({ success: true });
-});
-
-// --------------------
-// DEMAND ROUTES (UNCHANGED)
-// --------------------
-app.get("/demand/:itemId", (req, res) => {
-  const itemId = Number(req.params.itemId);
-  res.json(demand[itemId] || []);
-});
-
-app.post("/demand", (req, res) => {
-  const { itemId, quantity } = req.body;
-  if (!itemId || quantity == null) return res.status(400).json({ error: "Invalid data" });
-  const itemExists = items.some(i => i.id === itemId);
-  if (!itemExists) return res.status(404).json({ error: "Item not found" });
-  if (!demand[itemId]) demand[itemId] = [];
-  demand[itemId].push({ week: demand[itemId].length + 1, quantity: Number(quantity) });
-  if (demand[itemId].length > 12) {
-    demand[itemId].shift();
-    demand[itemId] = demand[itemId].map((d, i) => ({ week: i + 1, quantity: d.quantity }));
-  }
-  res.json(demand[itemId]);
-});
-
-app.put("/demand", (req, res) => {
-  const { itemId, week, quantity } = req.body;
-  if (!itemId || !week || quantity == null) return res.status(400).json({ error: "Invalid data" });
-  const list = demand[itemId];
-  if (!list) return res.status(404).json({ error: "Demand not found" });
-  const entry = list.find(d => d.week === week);
-  if (!entry) return res.status(404).json({ error: "Week not found" });
-  entry.quantity = Number(quantity);
-  res.json(list);
-});
-
-// --------------------
-// SEED ITEMS
-// --------------------
-items.push(
-  { id: 101, name: "Keyboard", stock: 2, category: "Tech", unit_price: 50, unit: "pcs", createdAt: new Date().toISOString() },
-  { id: 102, name: "Monitor", stock: 1, category: "Tech", unit_price: 200, unit: "pcs", createdAt: new Date().toISOString() }
-);
-
-app.get("/ping-demand", (req, res) => {
-  res.json({ ok: true });
-});
-
-// --------------------
-// GEMINI TEST ROUTE
-// --------------------
-app.get("/ai/test", async (req, res) => {
+// 1. ITEM CRUD
+app.get("/items", async (req, res) => {
   try {
-    const model = getGeminiModel();
-    const result = await model.generateContent("Say exactly: Gemini backend is working");
-    res.json({ success: true, reply: result.response.text() });
-  } catch (error) {
-    console.error("Gemini error:", error);
-    res.status(500).json({ success: false, error: error.message });
+    const allItems = await Item.find(); 
+    res.json(allItems);
+  } catch (err) {
+    res.status(500).json({ error: "Fetch failed" });
   }
 });
 
-// --------------------
-// STOCK RECOMMENDATION (FIXED LOGIC)
-// --------------------
+app.post("/items", async (req, res) => {
+  try {
+    const newItem = new Item(req.body);
+    await newItem.save();
+    res.json(newItem);
+  } catch (err) {
+    res.status(500).json({ error: "Add failed" });
+  }
+});
+
+app.put("/items/:id", async (req, res) => {
+  try {
+    const updated = await Item.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
+  } catch (err) {
+    res.status(404).json({ error: "Not found" });
+  }
+});
+
+app.delete("/items/:id", async (req, res) => {
+  try {
+    await Item.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Delete failed" });
+  }
+});
+
+// 2. DEMAND TRACKING
+app.post("/demand", async (req, res) => {
+  try {
+    const { itemId, quantity } = req.body;
+    const newEntry = new Demand({ itemId, quantity: Number(quantity) });
+    await newEntry.save();
+    const history = await Demand.find({ itemId }).sort({ date: 1 });
+    res.json(history.map((d, i) => ({ week: i + 1, quantity: d.quantity })));
+  } catch (err) {
+    res.status(500).json({ error: "Update failed" });
+  }
+});
+
+app.get("/demand/:itemId", async (req, res) => {
+  try {
+    const history = await Demand.find({ itemId: req.params.itemId }).sort({ date: 1 });
+    res.json(history.map((d, i) => ({ week: i + 1, quantity: d.quantity })));
+  } catch (err) {
+    res.status(500).json({ error: "History failed" });
+  }
+});
+
+// 3. AI RECOMMENDATION
 app.post("/recommend/stock", async (req, res) => {
   try {
-    const { itemId, sellingPrice, isFestival } = req.body;
-
-    const item = items.find(i => i.id === Number(itemId));
+    const { itemId, isFestival } = req.body;
+    const item = await Item.findById(itemId);
     if (!item) return res.status(404).json({ error: "Item not found" });
 
-    const weeklyDemand = demand[itemId] || [];
-    
-    // 1. Logic Calculations
-    const avgDailyDemand = calculateAvgDailyDemand(weeklyDemand);
-    const hasIncreasingTrend = detectIncreasingTrend(weeklyDemand);
-    const marginPercent = calculateMarginPercent(item.unit_price, Number(sellingPrice));
+    const history = await Demand.find({ itemId }).sort({ date: 1 });
+    const avgDailyDemand = calculateAvgDailyDemand(history);
+    const hasIncreasingTrend = detectIncreasingTrend(history);
+    const marginPercent = calculateMarginPercent(item.unit_price, item.selling_price);
 
-    // 2. Effective Demand & Recommended Stock
-    const effectiveDailyDemand = calculateEffectiveDailyDemand({
+    const effectiveDemand = calculateEffectiveDailyDemand({
       avgDailyDemand,
       hasIncreasingTrend,
       marginPercent,
       isFestival
     });
 
-    const BUFFER_DAYS = 14;
-    const recommendedStock = Math.ceil(effectiveDailyDemand * BUFFER_DAYS);
-    const buyQuantity = Math.max(recommendedStock - item.stock, 0);
-    const shouldBuy = buyQuantity > 0;
-
-    // 3. Profit Estimation (using unit_price)
-    const expectedProfit = buyQuantity * (Number(sellingPrice) - item.unit_price);
-   
-    // 4. AI Explanation (Gemini)
-let aiExplanation = "AI explanation not available";
-
-try {
-  const model = getGeminiModel();
-
-  const prompt = `
-You are a retail inventory advisor.
-
-Explain the stock recommendation clearly in simple business language.
-
-Details:
-- Item name: ${item.name}
-- Current stock: ${item.stock}
-- Average daily demand: ${avgDailyDemand.toFixed(2)}
-- Increasing demand trend: ${hasIncreasingTrend ? "Yes" : "No"}
-- Festival period: ${isFestival ? "Yes" : "No"}
-- Profit margin: ${(marginPercent * 100).toFixed(1)}%
-- Recommended stock level: ${recommendedStock}
-- Expected profit: ${expectedProfit.toFixed(2)}
-
-Explain:
-1. Why this stock level is recommended
-2. How demand trend and festival affected it
-3. How profit margin influenced the decision
-
-Keep it short and practical.
-`;
-
-  const result = await model.generateContent(prompt);
-  aiExplanation = result.response.text();
-
-} catch (aiError) {
-  console.error("AI explanation error:", aiError.message);
-}
+    const recommendedStock = Math.ceil(effectiveDemand * 30);
 
     res.json({
-  item: item.name,
-  currentStock: item.stock,
-  avgDailyDemand: avgDailyDemand.toFixed(2),
-  bufferDays: BUFFER_DAYS,
-  recommendedStock,
-  shouldBuy,
-  buyQuantity,
-  marginPercent: (marginPercent * 100).toFixed(1) + "%",
-  hasIncreasingTrend,
-  isFestival: !!isFestival,
-  expectedProfit: Number(expectedProfit.toFixed(2)),
-  aiExplanation
-});
-
-
-  } 
-  catch (err) {
-  console.error("STOCK AI ERROR 👉", err);
-  res.status(500).json({
-    error: "Stock recommendation failed",
-    details: err.message || err
-  });
-}
-});
-
-
-app.post("/recommend/cash", async (req, res) => {
-  try {
-    const { cashAvailable, isFestival } = req.body;
-    let remainingCash = Number(cashAvailable);
-
-    if (!remainingCash || remainingCash <= 0) {
-      return res.status(400).json({ error: "Invalid cash amount" });
-    }
-
-    const recommendations = [];
-
-    for (const item of items) {
-      const weeklyDemand = demand[item.id] || [];
-
-      const avgDailyDemand = calculateAvgDailyDemand(weeklyDemand);
-      if (avgDailyDemand === 0) continue;
-
-      const hasIncreasingTrend = detectIncreasingTrend(weeklyDemand);
-
-      const effectiveDailyDemand = calculateEffectiveDailyDemand({
-        avgDailyDemand,
-        hasIncreasingTrend,
-        marginPercent: 0, // ignored safely
-        isFestival
-      });
-
-      const BUFFER_DAYS = 14;
-      const recommendedStock = Math.ceil(effectiveDailyDemand * BUFFER_DAYS);
-      const buyQuantity = Math.max(recommendedStock - item.stock, 0);
-
-      if (buyQuantity <= 0) continue;
-
-      const cost = buyQuantity * item.unit_price;
-
-      const priorityScore =
-        effectiveDailyDemand *
-        BUFFER_DAYS *
-        (hasIncreasingTrend ? 1.3 : 1) *
-        (isFestival ? 1.25 : 1);
-
-      recommendations.push({
-        itemId: item.id,
-        item: item.name,
-        buyQuantity,
-        cost,
-        priorityScore
-      });
-    }
-
-    // Sort by urgency
-    recommendations.sort((a, b) => b.priorityScore - a.priorityScore);
-
-    const finalPlan = [];
-
-    for (const rec of recommendations) {
-      if (remainingCash <= 0) break;
-
-      if (rec.cost <= remainingCash) {
-        remainingCash -= rec.cost;
-        finalPlan.push({
-          itemId: rec.itemId,
-          item: rec.item,
-          buyQuantity: rec.buyQuantity,
-          cost: rec.cost,
-          remainingCash
-        });
-      }
-    }
-
-    // Gemini explanation (NO pricing assumptions)
-    let aiExplanation = "AI explanation not available";
-    try {
-      const model = getGeminiModel();
-
-      const prompt = `
-You are a retail inventory advisor.
-
-The shopkeeper has limited cash and wants to restock wisely.
-
-Festival period: ${isFestival ? "Yes" : "No"}
-
-Purchases made:
-${finalPlan
-  .map(p => `- ${p.item}: Buy ${p.buyQuantity}, Cost ${p.cost}`)
-  .join("\n")}
-
-Explain why these items were prioritized based on demand trends, urgency, and seasonality.
-Avoid mentioning selling price or profit.
-Keep it clear and simple.
-`;
-
-      const result = await model.generateContent(prompt);
-      aiExplanation = result.response.text();
-    } catch (aiErr) {
-      console.error("AI explanation error:", aiErr.message);
-    }
-
-    res.json({
-      cashAvailable,
-      remainingCash,
-      purchasePlan: finalPlan,
-      aiExplanation
+      recommendedStock,
+      avgDailyDemand: avgDailyDemand.toFixed(2),
+      status: recommendedStock > item.stock ? "Restock Needed" : "Healthy"
     });
-
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Cash recommendation failed" });
+    res.status(500).json({ error: "Recommendation error" });
   }
 });
 
+// 4. ANALYTICS DASHBOARD (Completed Missing Logic)
+app.get("/analytics/dashboard", async (req, res) => {
+  try {
+    const allItems = await Item.find();
+    const dashboardData = await Promise.all(allItems.map(async (item) => {
+      const history = await Demand.find({ itemId: item._id }).sort({ date: 1 });
+      const avgDemand = calculateAvgDailyDemand(history);
+      
+      let priceAction = "Maintain";
+      let suggestedPrice = item.selling_price;
+      let reason = "Stable demand observed.";
 
+      if (detectIncreasingTrend(history)) {
+        priceAction = "Increase";
+        suggestedPrice = Math.round(item.selling_price * 1.15);
+        reason = "Growing demand. Opportunity to optimize price.";
+      } else if (item.stock > 50 && avgDemand < 0.5) {
+        priceAction = "Decrease";
+        suggestedPrice = Math.round(item.selling_price * 0.90);
+        reason = "Slow movement. Consider discount to clear stock.";
+      }
 
-app.post("/ai/stock-recommendation", async (req, res) => {
-  res.json({
-    success: true,
-    message: "Stock recommendation route ready",
-    receivedData: req.body
-  });
+      return {
+        _id: item._id,
+        name: item.name,
+        stock: item.stock,
+        currentPrice: item.selling_price,
+        suggestedPrice,
+        priceAction,
+        reason,
+        avgDemand: avgDemand.toFixed(1),
+        demandHistory: history.map((d, i) => ({ week: i + 1, quantity: d.quantity }))
+      };
+    }));
+
+    res.json({
+      bestPerformers: [...dashboardData].sort((a, b) => b.avgDemand - a.avgDemand).slice(0, 3),
+      allData: dashboardData
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Dashboard failed" });
+  }
 });
 
-const PORT = 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+// --------------------
+// SERVER START
+// --------------------
+// '0.0.0.0' is required for Render to bind correctly to the external network
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
