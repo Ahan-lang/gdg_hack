@@ -5,207 +5,152 @@ export default function Demand() {
   const [selectedItem, setSelectedItem] = useState("");
   const [demand, setDemand] = useState([]);
   const [quantity, setQuantity] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // --------------------
-  // LOAD ITEMS (Logic Unchanged)
+  // LOAD ALL ITEMS
   // --------------------
   useEffect(() => {
     fetch("http://localhost:5000/items")
       .then((res) => res.json())
-      .then((data) => setItems(data))
-      .catch(() => alert("Failed to load items"));
+      .then((data) => setItems(data || []))
+      .catch(() => console.error("Failed to load items"));
   }, []);
 
   // --------------------
-  // RESET + LOAD DEMAND ON ITEM CHANGE (Logic Unchanged)
+  // LOAD DEMAND FOR SELECTED ITEM
   // --------------------
   useEffect(() => {
     if (!selectedItem) {
       setDemand([]);
-      setQuantity("");
       return;
     }
 
-    setDemand([]); 
-
     fetch(`http://localhost:5000/demand/${selectedItem}`)
       .then((res) => res.json())
-      .then((data) => setDemand(data))
-      .catch(() => alert("Failed to load demand"));
+      .then((data) => setDemand(Array.isArray(data) ? data : []))
+      .catch(() => console.error("Failed to load demand"));
   }, [selectedItem]);
 
   // --------------------
-  // ADD NEXT WEEK DEMAND (Logic Unchanged)
+  // ADD NEW WEEKLY DATA (POST)
   // --------------------
   const addWeek = async () => {
     if (!quantity || !selectedItem) return;
+    setLoading(true);
 
-    await fetch("http://localhost:5000/demand", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        itemId: Number(selectedItem),
-        quantity: Number(quantity),
-      }),
-    });
+    try {
+      const res = await fetch("http://localhost:5000/demand", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: selectedItem,
+          quantity: Number(quantity),
+        }),
+      });
 
-    setQuantity("");
+      if (!res.ok) throw new Error("Update failed");
 
-    const refreshed = await fetch(
-      `http://localhost:5000/demand/${selectedItem}`
-    );
-    setDemand(await refreshed.json());
+      const updatedHistory = await res.json();
+      setDemand(updatedHistory);
+      setQuantity("");
+    } catch (err) {
+      alert("Failed to add demand. Check if backend is running.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // --------------------
-  // UPDATE EXISTING WEEK (Logic Unchanged)
-  // --------------------
-  const updateWeek = async (week, value) => {
-    await fetch("http://localhost:5000/demand", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        itemId: Number(selectedItem),
-        week,
-        quantity: Number(value),
-      }),
-    });
-
-    const refreshed = await fetch(
-      `http://localhost:5000/demand/${selectedItem}`
-    );
-    setDemand(await refreshed.json());
-  };
-
-  // --------------------
-  // UI RENDER (Modernized Layout)
-  // --------------------
   return (
-    <div style={{ 
-      paddingTop: "140px", 
-      paddingBottom: "60px",
-      paddingLeft: "20px",
-      paddingRight: "20px",
-      minHeight: "100vh",
-      background: "linear-gradient(180deg, #fefce8 0%, #f0fdf4 100%)",
-      fontFamily: "'Inter', sans-serif"
-    }}>
-      <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
-        
-        <div style={{ marginBottom: "30px" }}>
-          <h2 style={{ fontSize: "32px", fontWeight: "800", color: "#166534", margin: "0" }}>Demand Planning</h2>
-          <p style={{ color: "#4b5563", marginTop: "5px" }}>Forecast and manage weekly requirements per item.</p>
-        </div>
+    <div style={containerStyle}>
+      <h2 style={headerStyle}>Sales Demand Tracking</h2>
+      <p style={subHeaderStyle}>Log weekly sales to power your AI recommendations.</p>
 
-        {/* ITEM SELECT BOX */}
-        <div style={{
-          background: "white",
-          padding: "25px",
-          borderRadius: "16px",
-          border: "1px solid #e5e7eb",
-          marginBottom: "25px",
-          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)"
-        }}>
-          <label style={{ display: "block", marginBottom: "10px", fontWeight: "600", color: "#374151" }}>Select Inventory Item</label>
-          <select
-            value={selectedItem}
+      <div style={cardStyle}>
+        {/* ITEM SELECTION */}
+        <div style={{ marginBottom: "25px" }}>
+          <label style={labelStyle}>Select Product to Update</label>
+          <select 
+            value={selectedItem} 
             onChange={(e) => setSelectedItem(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "12px",
-              borderRadius: "8px",
-              border: "1px solid #d1d5db",
-              fontSize: "16px",
-              outline: "none",
-              cursor: "pointer"
-            }}
+            style={inputStyle}
           >
-            <option value="">Select Item</option>
+            <option value="">Choose an item...</option>
             {items.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
+              <option key={item._id} value={item._id}>
+                {item.name} (Stock: {item.stock})
               </option>
             ))}
           </select>
         </div>
 
-        {/* DEMAND SECTION */}
+        {/* INPUT FIELD */}
         {selectedItem && (
-          <div style={{
-            background: "rgba(255, 255, 255, 0.8)",
-            backdropFilter: "blur(8px)",
-            padding: "30px",
-            borderRadius: "20px",
-            border: "1px solid rgba(250, 204, 21, 0.3)"
-          }}>
-            <h3 style={{ color: "#166534", marginTop: "0", marginBottom: "20px" }}>Weekly Demand (Max 12 Weeks)</h3>
-
-            <div style={{ display: "flex", gap: "10px", marginBottom: "30px" }}>
-              <input
-                type="number"
-                placeholder="Enter demand value"
-                value={quantity}
+          <div style={{ display: "flex", gap: "15px", marginBottom: "30px" }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Quantity Sold This Week</label>
+              <input 
+                type="number" 
+                value={quantity} 
                 onChange={(e) => setQuantity(e.target.value)}
-                style={{
-                  flex: "1",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  fontSize: "15px",
-                  outline: "none"
-                }}
+                placeholder="e.g. 45"
+                style={inputStyle}
               />
-              <button 
-                onClick={addWeek}
-                style={{
-                  padding: "0 25px",
-                  borderRadius: "8px",
-                  border: "none",
-                  backgroundColor: "#166534",
-                  color: "white",
-                  fontWeight: "600",
-                  cursor: "pointer"
-                }}
-              >
-                Add Week
-              </button>
             </div>
+            <button 
+              onClick={addWeek} 
+              disabled={loading}
+              style={buttonStyle}
+            >
+              {loading ? "Saving..." : "Log Sales"}
+            </button>
+          </div>
+        )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "15px" }}>
-              {demand.map((d) => (
-                <div key={d.week} style={{
-                  background: "white",
-                  padding: "15px",
-                  borderRadius: "12px",
-                  border: "1px solid #f1f5f9",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px"
-                }}>
-                  <span style={{ fontWeight: "700", color: "#374151" }}>Week {d.week}</span>
-                  <input
-                    type="number"
-                    value={d.quantity}
-                    onChange={(e) => {
-                      updateWeek(d.week, e.target.value);
-                    }}
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "6px",
-                      border: "1px solid #e2e8f0",
-                      textAlign: "center",
-                      fontWeight: "600",
-                      color: "#10b981",
-                      boxSizing: "border-box"
-                    }}
-                  />
-                </div>
-              ))}
+        {/* DEMAND HISTORY TABLE */}
+        {selectedItem && demand.length > 0 && (
+          <div style={{ marginTop: "20px" }}>
+            <h4 style={{ color: "#2d3748", marginBottom: "15px" }}>Recent History</h4>
+            <div style={tableWrapper}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid #edf2f7" }}>
+                    <th style={thStyle}>Timeframe</th>
+                    <th style={thStyle}>Quantity Sold</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {demand.map((d, i) => (
+                    <tr key={i} style={{ borderBottom: "1px solid #edf2f7" }}>
+                      <td style={tdStyle}>Week {d.week}</td>
+                      <td style={{ ...tdStyle, fontWeight: "700", color: "#2f855a" }}>
+                        {d.quantity} units
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
+        )}
+
+        {selectedItem && demand.length === 0 && (
+          <div style={emptyStateStyle}>No sales data found for this item yet.</div>
         )}
       </div>
     </div>
   );
 }
+
+// --- STYLES ---
+const containerStyle = { padding: "140px 20px 60px 20px", maxWidth: "900px", margin: "0 auto", fontFamily: "Inter, sans-serif" };
+const headerStyle = { fontSize: "32px", fontWeight: "800", color: "#1a202c", marginBottom: "8px" };
+const subHeaderStyle = { color: "#718096", marginBottom: "40px" };
+const cardStyle = { background: "#fff", padding: "35px", borderRadius: "24px", border: "1px solid #e2e8f0", boxShadow: "0 10px 25px rgba(0,0,0,0.05)" };
+const labelStyle = { display: "block", marginBottom: "10px", fontWeight: "600", color: "#4a5568", fontSize: "14px" };
+const inputStyle = { width: "100%", padding: "14px", borderRadius: "12px", border: "1px solid #cbd5e0", fontSize: "16px", outline: "none" };
+const buttonStyle = { padding: "0 30px", background: "#2f855a", color: "#fff", border: "none", borderRadius: "12px", fontWeight: "700", cursor: "pointer", height: "52px", alignSelf: "flex-end", transition: "0.2s" };
+const tableWrapper = { borderRadius: "12px", border: "1px solid #edf2f7", overflow: "hidden" };
+const thStyle = { padding: "12px", textAlign: "left", color: "#718096", fontSize: "12px", textTransform: "uppercase" };
+const tdStyle = { padding: "15px 12px", fontSize: "15px", color: "#2d3748" };
+const emptyStateStyle = { textAlign: "center", padding: "40px", color: "#a0aec0", fontStyle: "italic" };
