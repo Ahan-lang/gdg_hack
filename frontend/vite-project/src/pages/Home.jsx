@@ -9,7 +9,7 @@ export default function Home() {
     <div>
       <Hero />
       
-      <ActionCards />
+      <Actioncards />
 
       {/* 2. Add the Dashboard inside a container for proper alignment */}
       <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 20px 60px 20px" }}>
