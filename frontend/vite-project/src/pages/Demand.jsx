@@ -10,12 +10,19 @@ export default function Demand() {
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState("");
 
+  // Check for mobile screen for responsive styles
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
   useEffect(() => {
-    // UPDATED URL
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    
     fetch("https://gdg-hack.onrender.com/items")
       .then((res) => res.json())
       .then((data) => setItems(data || []))
       .catch(() => console.error("Failed to load items"));
+
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   useEffect(() => {
@@ -25,7 +32,6 @@ export default function Demand() {
 
   const fetchHistory = async () => {
     try {
-      // UPDATED URL
       const res = await fetch(`https://gdg-hack.onrender.com/demand/${selectedItem}`);
       const data = await res.json();
       setDemand(data);
@@ -36,7 +42,6 @@ export default function Demand() {
     if (!quantity || Number(quantity) < 0) return alert("Enter positive number");
     setLoading(true);
     try {
-      // UPDATED URL
       const res = await fetch("https://gdg-hack.onrender.com/demand", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -51,7 +56,6 @@ export default function Demand() {
 
   const saveEdit = async (id) => {
     try {
-      // UPDATED URL
       const res = await fetch(`https://gdg-hack.onrender.com/demand/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -84,23 +88,38 @@ export default function Demand() {
         </div>
 
         {selectedItem && (
-          <div style={quickAddBar}>
+          /* RESPONSIVE BAR: Stacks on mobile */
+          <div style={{
+            ...quickAddBar,
+            flexDirection: isMobile ? "column" : "row",
+            alignItems: "stretch"
+          }}>
             <input 
               type="number" 
               placeholder="Enter units sold..." 
               value={quantity} 
               onChange={(e) => setQuantity(e.target.value)} 
-              style={inlineInput}
+              style={{
+                ...inlineInput,
+                fontSize: "16px", // Prevents auto-zoom on mobile
+                width: isMobile ? "100%" : "auto"
+              }}
             />
-            <button onClick={addWeek} style={primaryBtn}>
+            <button onClick={addWeek} style={{
+              ...primaryBtn,
+              padding: isMobile ? "14px" : "0 24px",
+              height: isMobile ? "50px" : "auto",
+              width: isMobile ? "100%" : "auto"
+            }}>
               {loading ? "Saving..." : "Log Weekly Sales"}
             </button>
           </div>
         )}
 
         {demand.length > 0 && (
-          <div style={tableContainer}>
-            <table style={tableStyle}>
+          /* RESPONSIVE TABLE: Horizontal scroll if needed */
+          <div style={{ ...tableContainer, overflowX: "auto" }}>
+            <table style={{ ...tableStyle, minWidth: isMobile ? "600px" : "100%" }}>
               <thead>
                 <tr>
                   <th style={thStyle}>Timeline</th>
@@ -147,7 +166,7 @@ export default function Demand() {
   );
 }
 
-// --- STYLES (Unchanged) ---
+// --- STYLES ---
 const containerStyle = { padding: "60px 20px", maxWidth: "1000px", margin: "0 auto", color: "#1e293b", fontFamily: "'Inter', system-ui, sans-serif" };
 const headerSection = { marginBottom: "40px", textAlign: "center" };
 const titleStyle = { fontSize: "2.25rem", fontWeight: "800", letterSpacing: "-0.025em", marginBottom: "8px" };
@@ -159,7 +178,7 @@ const selectStyle = { width: "100%", padding: "12px 16px", borderRadius: "10px",
 const quickAddBar = { display: "flex", gap: "12px", background: "#f1f5f9", padding: "16px", borderRadius: "12px", marginBottom: "32px" };
 const inlineInput = { flex: 1, padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", outline: "none" };
 const primaryBtn = { background: "#0f172a", color: "#fff", border: "none", padding: "0 24px", borderRadius: "8px", fontWeight: "600", cursor: "pointer", transition: "opacity 0.2s" };
-const tableContainer = { borderRadius: "12px", border: "1px solid #e2e8f0", overflow: "hidden" };
+const tableContainer = { borderRadius: "12px", border: "1px solid #e2e8f0" };
 const tableStyle = { width: "100%", borderCollapse: "collapse" };
 const thStyle = { background: "#f8fafc", padding: "14px 20px", textAlign: "left", fontSize: "0.75rem", fontWeight: "700", color: "#64748b", textTransform: "uppercase" };
 const tdStyle = { padding: "16px 20px", borderTop: "1px solid #f1f5f9", fontSize: "0.95rem" };

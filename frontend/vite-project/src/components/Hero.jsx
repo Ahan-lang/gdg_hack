@@ -22,7 +22,8 @@ export default function Hero() {
 
           .word-slider {
             display: block;
-            height: 80px; /* Fixed height for the viewport */
+            /* Use clamp to make the slider height responsive */
+            height: clamp(50px, 10vw, 80px); 
             overflow: hidden;
             margin-top: 5px;
           }
@@ -30,14 +31,14 @@ export default function Hero() {
           .word-wrapper {
             display: flex;
             flex-direction: column;
-            /* Adjust duration for speed preference */
             animation: slideUp 10s cubic-bezier(0.76, 0, 0.24, 1) infinite;
           }
 
           .dynamic-word {
-            height: 80px;
-            line-height: 80px;
-            color: #10b981; /* Primary Green */
+            /* Match the height of the word-slider */
+            height: clamp(50px, 10vw, 80px);
+            line-height: clamp(50px, 10vw, 80px);
+            color: #10b981; 
             white-space: nowrap;
           }
         `}
@@ -45,8 +46,7 @@ export default function Hero() {
 
       <div style={{
         textAlign: "center",
-        padding: "120px 20px",
-        /* Darker Mint Tone */
+        padding: "clamp(80px, 15vh, 120px) 20px", // Responsive vertical padding
         background: "linear-gradient(180deg, #dcfce7 0%, #f0fdf4 100%)", 
         minHeight: "60vh",
         display: "flex",
@@ -54,6 +54,7 @@ export default function Hero() {
         justifyContent: "center",
         alignItems: "center",
         position: "relative",
+        overflow: "hidden" // Prevents the glow from causing horizontal scroll
       }}>
         
         <span style={{
@@ -70,12 +71,15 @@ export default function Hero() {
         </span>
 
         <h1 style={{
-          fontSize: "68px",
+          /* Fluid font size: min 32px, preferred 8vw, max 68px */
+          fontSize: "clamp(32px, 8vw, 68px)",
           fontWeight: "800",
           color: "#064e3b",
           lineHeight: "1.1",
           letterSpacing: "-0.03em",
-          margin: 0
+          margin: 0,
+          width: "100%", // Ensures it doesn't overflow
+          maxWidth: "1000px"
         }}>
           Effortless
           <div className="word-slider">
@@ -83,7 +87,6 @@ export default function Hero() {
               {dynamicWords.map((word, i) => (
                 <span key={i} className="dynamic-word">{word}</span>
               ))}
-              {/* Loop back to first word */}
               <span className="dynamic-word">{dynamicWords[0]}</span>
             </div>
           </div>
@@ -93,7 +96,8 @@ export default function Hero() {
           maxWidth: "600px",
           marginTop: "30px",
           color: "#374151",
-          fontSize: "20px",
+          /* Fluid font size for paragraph */
+          fontSize: "clamp(16px, 4vw, 20px)",
           lineHeight: "1.6",
           opacity: 0.9
         }}>
@@ -101,11 +105,10 @@ export default function Hero() {
           manage <strong>cash flow</strong>, and scale with AI-driven insights.
         </p>
 
-        {/* Soft decorative glow */}
         <div style={{
           position: "absolute",
-          width: "500px",
-          height: "500px",
+          width: "clamp(300px, 80vw, 500px)", // Responsive decorative glow
+          height: "clamp(300px, 80vw, 500px)",
           background: "radial-gradient(circle, rgba(16,185,129,0.15) 0%, rgba(255,255,255,0) 70%)",
           zIndex: 0,
           pointerEvents: "none"

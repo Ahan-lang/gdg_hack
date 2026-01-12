@@ -11,7 +11,6 @@ export default function AnalyticsDashboard() {
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        // UPDATED URL FROM localhost:5000 TO GDG-HACK.ONRENDER.COM
         const res = await fetch("https://gdg-hack.onrender.com/analytics/dashboard");
         if (!res.ok) throw new Error("Failed to fetch");
         const json = await res.json();
@@ -88,57 +87,60 @@ export default function AnalyticsDashboard() {
           </div>
         </div>
         
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead style={{ backgroundColor: "#f8fafc" }}>
-            <tr>
-              <th style={thStyle}>Product</th>
-              <th style={thStyle}>Sales Trend</th>
-              <th style={thStyle}>Current Price</th>
-              <th style={thStyle}>AI Optimized</th>
-              <th style={thStyle}>Status</th>
-              <th style={thStyle}>Action Plan</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.allData?.map((item) => (
-              <tr key={item._id || item.id} style={trStyle}>
-                <td style={tdStyle}>
-                  <div style={{ fontWeight: "700", color: "#1a202c" }}>{item.name}</div>
-                  <div style={{ fontSize: "12px", color: "#a0aec0" }}>Stock: {item.stock} units</div>
-                </td>
-                <td style={{ ...tdStyle, width: "150px" }}>
-                  <div style={{ height: "45px" }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={item.demandHistory || []}>
-                        <Line 
-                          type="monotone" 
-                          dataKey="quantity" 
-                          stroke={item.priceAction === "Increase" ? "#38a169" : item.priceAction === "Decrease" ? "#e53e3e" : "#3182ce"} 
-                          strokeWidth={2.5} 
-                          dot={false} 
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </td>
-                <td style={tdStyle}>₹{item.currentPrice}</td>
-                <td style={{ ...tdStyle, color: "#2f855a", fontWeight: "800" }}>₹{item.suggestedPrice}</td>
-                <td style={tdStyle}>
-                  <span style={actionBadgeStyle(item.priceAction)}>{item.priceAction}</span>
-                </td>
-                <td style={{ ...tdStyle, fontSize: "13px", color: "#4a5568", maxWidth: "250px", lineHeight: '1.4' }}>
-                  {item.reason}
-                </td>
+        {/* ADDED SCROLL WRAPPER HERE */}
+        <div style={{ overflowX: "auto", width: "100%", WebkitOverflowScrolling: "touch" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "800px" }}>
+            <thead style={{ backgroundColor: "#f8fafc" }}>
+              <tr>
+                <th style={thStyle}>Product</th>
+                <th style={thStyle}>Sales Trend</th>
+                <th style={thStyle}>Current Price</th>
+                <th style={thStyle}>AI Optimized</th>
+                <th style={thStyle}>Status</th>
+                <th style={thStyle}>Action Plan</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.allData?.map((item) => (
+                <tr key={item._id || item.id} style={trStyle}>
+                  <td style={tdStyle}>
+                    <div style={{ fontWeight: "700", color: "#1a202c" }}>{item.name}</div>
+                    <div style={{ fontSize: "12px", color: "#a0aec0" }}>Stock: {item.stock} units</div>
+                  </td>
+                  <td style={{ ...tdStyle, width: "150px" }}>
+                    <div style={{ height: "45px" }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={item.demandHistory || []}>
+                          <Line 
+                            type="monotone" 
+                            dataKey="quantity" 
+                            stroke={item.priceAction === "Increase" ? "#38a169" : item.priceAction === "Decrease" ? "#e53e3e" : "#3182ce"} 
+                            strokeWidth={2.5} 
+                            dot={false} 
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </td>
+                  <td style={tdStyle}>₹{item.currentPrice}</td>
+                  <td style={{ ...tdStyle, color: "#2f855a", fontWeight: "800" }}>₹{item.suggestedPrice}</td>
+                  <td style={tdStyle}>
+                    <span style={actionBadgeStyle(item.priceAction)}>{item.priceAction}</span>
+                  </td>
+                  <td style={{ ...tdStyle, fontSize: "13px", color: "#4a5568", maxWidth: "250px", lineHeight: '1.4' }}>
+                    {item.reason}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
 
-// --- STYLING CONSTANTS (Keep as original) ---
+// --- STYLING CONSTANTS ---
 const loaderStyle = { padding: "100px", textAlign: "center", color: "#2f855a", fontWeight: "bold" };
 const heroCardStyle = { background: "#ffffff", padding: "30px", borderRadius: "24px", border: "1px solid #e2e8f0", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)" };
 const tableContainerStyle = { background: "#ffffff", borderRadius: "24px", boxShadow: "0 4px 20px rgba(0, 0, 0, 0.03)", border: "1px solid #e2e8f0", overflow: "hidden" };
